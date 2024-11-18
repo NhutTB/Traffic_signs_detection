@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kết quả nhận diện</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        .image-container {
+            margin: 20px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 4px;
+            cursor: zoom-in;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            overflow: auto;
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            position: relative;
+            top: 50%;
+            transform: translateY(-50%);
+            max-width: 90%;
+            max-height: 90vh;
+        }
+
+        .modal-content img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .close {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .zoom-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .zoom-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            margin: 0 5px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .zoom-button:hover {
+            background-color: #45a049;
+        }
+
+        .detection-list {
+            margin: 20px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        li {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .confidence-high { color: #28a745; }
+        .confidence-medium { color: #ffc107; }
+        .confidence-low { color: #dc3545; }
+
+        .back-button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+
+        .back-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kết quả nhận diện</h1>
+    
+    <div class="image-container">
+        <h2>Ảnh đã nhận diện:</h2>
+        <img src="{{ url_for('static', filename='uploads/' + detected_image) }}" 
+             alt="Ảnh đã nhận diện"
+             onclick="openModal(this)">
+    </div>
+
+    <!-- Modal -->
+    <div id="imageModal" class="modal" onclick="closeModal()">
+        <span class="close">&times;</span>
+        <div class="modal-content">
+            <img id="modalImage" src="" alt="Ảnh phóng to">
+        </div>
+        <div class="zoom-controls">
+            <button class="zoom-button" onclick="zoomIn(event)">+</button>
+            <button class="zoom-button" onclick="zoomOut(event)">-</button>
+            <button class="zoom-button" onclick="resetZoom(event)">Reset</button>
+        </div>
+    </div>
+    
+    <div class="detection-list">
+        <h2>Danh sách phát hiện:</h2>
+        <ul>
+        {% for det in detections %}
+            <li>
+                Loại biển báo: <strong>{{ det.class }}</strong><br>
+                Độ tin cậy: 
+                <span class="
+                    {% if det.confidence >= 90 %}confidence-high
+                    {% elif det.confidence >= 70 %}confidence-medium
+                    {% else %}confidence-low
+                    {% endif %}
+                ">
+                    {{ det.confidence }}%
+                </span>
+            </li>
+        {% endfor %}
+        </ul>
+    </div>
+    
+    <a href="/" class="back-button">Quay lại</a>
+
+    <script>
+        let currentZoom = 1;
+        const zoomStep = 0.5;
+        const maxZoom = 5;
+        const minZoom = 0.5;
+
+        function openModal(img) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modal.style.display = "block";
+            modalImg.src = img.src;
+            document.querySelector('.zoom-controls').style.display = 'block';
+            resetZoom();
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').style.display = "none";
+            document.querySelector('.zoom-controls').style.display = 'none';
+        }
+
+        function zoomIn(e) {
+            e.stopPropagation();
+            if (currentZoom < maxZoom) {
+                currentZoom += zoomStep;
+                updateZoom();
+            }
+        }
+
+        function zoomOut(e) {
+            e.stopPropagation();
+            if (currentZoom > minZoom) {
+                currentZoom -= zoomStep;
+                updateZoom();
+            }
+        }
+
+        function resetZoom(e) {
+            if (e) e.stopPropagation();
+            currentZoom = 1;
+            updateZoom();
+        }
+
+        function updateZoom() {
+            const modalImg = document.getElementById('modalImage');
+            modalImg.style.transform = `scale(${currentZoom})`;
+            modalImg.style.transition = 'transform 0.3s ease';
+        }
+
+        // Đóng modal khi nhấn ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Ngăn việc đóng modal khi click vào ảnh
+        document.querySelector('.modal-content').onclick = function(e) {
+            e.stopPropagation();
+        };
+    </script>
+</body>
+</html>
